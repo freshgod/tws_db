@@ -21,6 +21,11 @@ def add_price_info_to_db(stuck_number,price_info_list):
     
         date = datetime.datetime.strptime(item['Date'],"%Y-%m-%d")
         
+        for key in item.keys():
+            if key == "Date":
+                continue
+            item[key]=float(item[key])
+        
         stock_price_info = {
             "measurement": "price_info",
             "time": int(date.strftime('%s')),
@@ -36,10 +41,9 @@ def chunkify(a, n):
 
 def write_influx_data(stock_number, data_points):
     client = InfluxDBClient(HOST, PORT, USER, PASSWORD, stock_number)
-    DBNAME = stock_number
+    DBNAME = "stock_"+stock_number+".TW"
 
     # create db
-    client.drop_database(DBNAME)
     client.create_database(DBNAME)
     client.switch_database(DBNAME)
 
@@ -47,9 +51,28 @@ def write_influx_data(stock_number, data_points):
     data_points_parts = chunkify(data_points, 10)
     for data_part in data_points_parts:
         client.write_points(data_part,time_precision='s')
+
+def read_list_from_file(file="stock.csv"):
+    with open(file) as f:
+        stock_list = f.read().splitlines()
+    return stock_list
     
+def remove_stock_in_file(stock_number, file="stock.csv"):
+    f = open(file)
+    lines = f.readlines()
+    f.close()
+    with open(file,"w") as f:
+        for line in lines:
+            if stock_number in line:
+                continue
+            f.write(line)
+
 if __name__ == '__main__':
-    stock_number = '2454'
-    price_info_list = get_yahoo_price_info(stock_number,START_DATE,datetime.datetime.today().strftime("%Y-%m-%d"))
-    
-    add_price_info_to_db(stock_number,price_info_list)
+    stock_list = read_list_from_file()
+    for stock_number in stock_list:
+        print("get %s history data"%(stock_number))
+        price_info_list = get_yahoo_price_info(stock_number,START_DATE,datetime.datetime.today().strftime("%Y-%m-%d"))
+        if price_info_list:
+            add_price_info_to_db(stock_number,price_info_list)
+        else:
+            print("%s has no history data"%(stock_number))
