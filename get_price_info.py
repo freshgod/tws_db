@@ -48,9 +48,29 @@ def write_influx_data(stock_number, data_points):
     client.switch_database(DBNAME)
 
     # Write points by parts
-    data_points_parts = chunkify(data_points, 10)
-    for data_part in data_points_parts:
-        client.write_points(data_part,time_precision='s')
+    if len(data_points) > 100:
+        data_points_parts = chunkify(data_points, 10)
+        for data_part in data_points_parts:
+            client.write_points(data_part,time_precision='s')
+    else:
+        client.write_points(data_points,time_precision='s')
+
+def get_newest_data_date(stock_number):
+    client = InfluxDBClient(HOST, PORT, USER, PASSWORD, stock_number)
+    DBNAME = "stock_"+stock_number+".TW"
+
+    # create db
+    client.create_database(DBNAME)
+    client.switch_database(DBNAME)
+    
+    # get the last Date
+    query = 'select last(Date) from price_info'
+    result = list(client.query(query, database=DBNAME))
+    
+    if [] == result:
+        return ""
+    else:
+        return result[0][0]['last']
 
 def read_list_from_file(file="stock.csv"):
     with open(file) as f:
@@ -69,9 +89,15 @@ def remove_stock_in_file(stock_number, file="stock.csv"):
 
 if __name__ == '__main__':
     stock_list = read_list_from_file()
+    todat_date = datetime.datetime.today().strftime("%Y-%m-%d")
     for stock_number in stock_list:
         print("get %s history data"%(stock_number))
-        price_info_list = get_yahoo_price_info(stock_number,START_DATE,datetime.datetime.today().strftime("%Y-%m-%d"))
+        last_date = get_newest_data_date(stock_number)
+        if "" == last_date:
+            last_date = START_DATE
+        
+        print("get %s from %s to %s"%(stock_number, last_date, todat_date))
+        price_info_list = get_yahoo_price_info(stock_number,last_date,todat_date)
         if price_info_list:
             add_price_info_to_db(stock_number,price_info_list)
         else:
